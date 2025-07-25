@@ -65,17 +65,27 @@ class NemotronHMLP(nn.Module):
         quant_config: Optional[QuantizationConfig] = None,
         bias: bool = False,
         prefix: str = "",
+        layer_idx: int = None,
     ) -> None:
         super().__init__()
+        hybrid_override_pattern = config.hybrid_override_pattern
+        mlp_index = hybrid_override_pattern[:layer_idx+1].count("-")-1
+        if isinstance(config.intermediate_size, list):
+            if len(config.intermediate_size) == 1:
+                intermediate_size = config.intermediate_size[0]
+            else:
+                intermediate_size = config.intermediate_size[mlp_index]
+        else:
+            intermediate_size = config.intermediate_size
         self.up_proj = ColumnParallelLinear(
             input_size=config.hidden_size,
-            output_size=config.intermediate_size,
+            output_size=intermediate_size,
             bias=bias,
             quant_config=quant_config,
             prefix=f"{prefix}.up_proj",
         )
         self.down_proj = RowParallelLinear(
-            input_size=config.intermediate_size,
+            input_size=intermediate_size,
             output_size=config.hidden_size,
             bias=bias,
             quant_config=quant_config,
@@ -108,6 +118,7 @@ class NemotronHMLPDecoderLayer(nn.Module):
             quant_config=quant_config,
             bias=config.mlp_bias,
             prefix=f"{prefix}.mixer",
+            layer_idx=layer_idx,
         )
 
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
